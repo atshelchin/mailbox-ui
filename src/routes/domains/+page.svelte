@@ -35,6 +35,9 @@
 	let deleteLoading = $state(false);
 	let domainToDelete = $state<UserDomain | null>(null);
 
+	// Copy feedback
+	let copiedRecord = $state('');
+
 	onMount(async () => {
 		if (!userStore.isLoggedIn) {
 			goto('/login');
@@ -156,6 +159,8 @@
 
 	function copyTxtRecord(record: string) {
 		navigator.clipboard.writeText(record);
+		copiedRecord = record;
+		setTimeout(() => (copiedRecord = ''), 2000);
 	}
 </script>
 
@@ -285,13 +290,20 @@
 						<code>{domainToVerify?.txtRecord}</code>
 						<button
 							class="copy-btn"
+							class:copied={copiedRecord === domainToVerify?.txtRecord}
 							onclick={() => copyTxtRecord(domainToVerify?.txtRecord || '')}
 							title="Copy"
 						>
-							<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-								<rect x="9" y="9" width="13" height="13" rx="2" />
-								<path d="M5 15H4a2 2 0 01-2-2V4a2 2 0 012-2h9a2 2 0 012 2v1" />
-							</svg>
+							{#if copiedRecord === domainToVerify?.txtRecord}
+								<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+									<path d="M20 6L9 17l-5-5" />
+								</svg>
+							{:else}
+								<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+									<rect x="9" y="9" width="13" height="13" rx="2" />
+									<path d="M5 15H4a2 2 0 01-2-2V4a2 2 0 012-2h9a2 2 0 012 2v1" />
+								</svg>
+							{/if}
 						</button>
 					</div>
 				</div>
@@ -317,7 +329,7 @@
 				</div>
 				<div class="record-row">
 					<span class="record-label">Value:</span>
-					<code>mail.yourmailserver.com</code>
+					<code>mail.appsdata.xyz</code>
 				</div>
 			</div>
 		</div>
@@ -476,6 +488,10 @@
 	.copy-btn:hover {
 		color: var(--color-text);
 		background: var(--color-bg-hover);
+	}
+
+	.copy-btn.copied {
+		color: var(--color-success);
 	}
 
 	@media (max-width: 640px) {

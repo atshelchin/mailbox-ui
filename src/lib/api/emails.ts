@@ -29,10 +29,18 @@ export interface Email {
 	attachments: Attachment[];
 }
 
+export interface Pagination {
+	page: number;
+	pageSize: number;
+	total: number;
+	totalPages: number;
+	hasMore: boolean;
+}
+
 interface EmailsResponse {
 	success: boolean;
 	mailbox?: { id: string; address: string };
-	total?: number;
+	pagination?: Pagination;
 	emails?: EmailSummary[];
 	error?: string;
 }
@@ -43,8 +51,14 @@ interface EmailResponse {
 	error?: string;
 }
 
-export async function getEmails(mailboxId: string): Promise<EmailsResponse> {
-	return api.get<EmailsResponse>(`/api/emails/mailbox/${mailboxId}`);
+export async function getEmails(
+	mailboxId: string,
+	page = 1,
+	pageSize = 20
+): Promise<EmailsResponse> {
+	return api.get<EmailsResponse>(
+		`/api/emails/mailbox/${mailboxId}?page=${page}&pageSize=${pageSize}`
+	);
 }
 
 export async function getEmail(emailId: string): Promise<EmailResponse> {

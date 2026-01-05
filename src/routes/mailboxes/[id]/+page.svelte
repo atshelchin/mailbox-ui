@@ -4,13 +4,13 @@
 	import { page } from '$app/stores';
 	import { userStore } from '$lib/stores';
 	import { Modal } from '$lib/components';
-	import { getEmails, deleteEmail, type EmailSummary } from '$lib/api';
+	import { getEmails, deleteEmail, type EmailSummary, type Pagination } from '$lib/api';
 	import { formatDate, formatBytes } from '$lib/utils';
 
 	let mailboxId = $derived($page.params.id);
 	let mailboxAddress = $state('');
 	let emails = $state<EmailSummary[]>([]);
-	let total = $state(0);
+	let pagination = $state<Pagination | null>(null);
 	let loading = $state(true);
 	let error = $state('');
 
@@ -19,8 +19,15 @@
 	let deleteLoading = $state(false);
 	let emailToDelete = $state<EmailSummary | null>(null);
 
+	// Copy feedback
+	let copied = $state(false);
+
 	// Auto refresh
 	let refreshInterval: ReturnType<typeof setInterval>;
+
+	// Current page
+	let currentPage = $state(1);
+	const pageSize = 20;
 
 	onMount(() => {
 		if (!userStore.isLoggedIn) {
@@ -30,31 +37,38 @@
 		loadEmails();
 
 		// Auto refresh every 30 seconds
-		refreshInterval = setInterval(loadEmails, 30000);
+		refreshInterval = setInterval(() => loadEmails(currentPage), 30000);
 
 		return () => {
 			if (refreshInterval) clearInterval(refreshInterval);
 		};
 	});
 
-	async function loadEmails() {
+	async function loadEmails(page = 1) {
 		if (!mailboxId) return;
 
-		const wasLoading = loading;
-		if (wasLoading) loading = true;
+		loading = true;
 		error = '';
 
-		const res = await getEmails(mailboxId);
+		const res = await getEmails(mailboxId, page, pageSize);
 
 		if (res.success) {
 			if (res.mailbox) mailboxAddress = res.mailbox.address;
 			if (res.emails) emails = res.emails;
-			if (res.total !== undefined) total = res.total;
+			if (res.pagination) {
+				pagination = res.pagination;
+				currentPage = res.pagination.page;
+			}
 		} else {
 			error = res.error || 'Failed to load emails';
 		}
 
 		loading = false;
+	}
+
+	function goToPage(page: number) {
+		if (page < 1 || (pagination && page > pagination.totalPages)) return;
+		loadEmails(page);
 	}
 
 	function confirmDelete(email: EmailSummary) {
@@ -70,10 +84,17 @@
 		const res = await deleteEmail(emailToDelete.id);
 
 		if (res.success) {
-			emails = emails.filter(e => e.id !== emailToDelete!.id);
-			total = Math.max(0, total - 1);
+			emails = emails.filter((e) => e.id !== emailToDelete!.id);
+			if (pagination) {
+				pagination = { ...pagination, total: pagination.total - 1 };
+			}
 			showDeleteModal = false;
 			emailToDelete = null;
+
+			// Reload if current page is now empty
+			if (emails.length === 0 && currentPage > 1) {
+				loadEmails(currentPage - 1);
+			}
 		}
 
 		deleteLoading = false;
@@ -81,6 +102,8 @@
 
 	function copyAddress() {
 		navigator.clipboard.writeText(mailboxAddress);
+		copied = true;
+		setTimeout(() => (copied = false), 2000);
 	}
 </script>
 
@@ -99,16 +122,22 @@
 			</a>
 			<h1 class="page-title email-title">
 				{mailboxAddress}
-				<button class="copy-btn" onclick={copyAddress} title="Copy address">
-					<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-						<rect x="9" y="9" width="13" height="13" rx="2" />
-						<path d="M5 15H4a2 2 0 01-2-2V4a2 2 0 012-2h9a2 2 0 012 2v1" />
-					</svg>
+				<button class="copy-btn" class:copied onclick={copyAddress} title="Copy address">
+					{#if copied}
+						<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+							<path d="M20 6L9 17l-5-5" />
+						</svg>
+					{:else}
+						<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+							<rect x="9" y="9" width="13" height="13" rx="2" />
+							<path d="M5 15H4a2 2 0 01-2-2V4a2 2 0 012-2h9a2 2 0 012 2v1" />
+						</svg>
+					{/if}
 				</button>
 			</h1>
-			<p class="page-subtitle">{total} email{total !== 1 ? 's' : ''}</p>
+			<p class="page-subtitle">{pagination?.total ?? 0} email{(pagination?.total ?? 0) !== 1 ? 's' : ''}</p>
 		</div>
-		<button class="btn btn-secondary" onclick={loadEmails} disabled={loading}>
+		<button class="btn btn-secondary" onclick={() => loadEmails(currentPage)} disabled={loading}>
 			<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
 				<path d="M23 4v6h-6M1 20v-6h6" />
 				<path d="M3.51 9a9 9 0 0114.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0020.49 15" />
@@ -153,11 +182,42 @@
 				</div>
 			{/each}
 		</div>
+
+		<!-- Pagination -->
+		{#if pagination && pagination.totalPages > 1}
+			<div class="pagination">
+				<button
+					class="pagination-btn"
+					onclick={() => goToPage(currentPage - 1)}
+					disabled={currentPage <= 1}
+				>
+					<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+						<path d="M15 18l-6-6 6-6" />
+					</svg>
+					Previous
+				</button>
+
+				<div class="pagination-info">
+					Page {currentPage} of {pagination.totalPages}
+				</div>
+
+				<button
+					class="pagination-btn"
+					onclick={() => goToPage(currentPage + 1)}
+					disabled={!pagination.hasMore}
+				>
+					Next
+					<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+						<path d="M9 18l6-6-6-6" />
+					</svg>
+				</button>
+			</div>
+		{/if}
 	{/if}
 </div>
 
 <!-- Delete Modal -->
-<Modal title="Delete Email" open={showDeleteModal} onclose={() => showDeleteModal = false}>
+<Modal title="Delete Email" open={showDeleteModal} onclose={() => (showDeleteModal = false)}>
 	<p>Are you sure you want to delete this email?</p>
 	<p style="color: var(--color-text-secondary); margin-top: 8px">
 		From: {emailToDelete?.from}<br />
@@ -165,7 +225,7 @@
 	</p>
 
 	{#snippet footer()}
-		<button class="btn btn-secondary" onclick={() => showDeleteModal = false} disabled={deleteLoading}>
+		<button class="btn btn-secondary" onclick={() => (showDeleteModal = false)} disabled={deleteLoading}>
 			Cancel
 		</button>
 		<button class="btn btn-danger" onclick={handleDelete} disabled={deleteLoading}>
@@ -208,6 +268,10 @@
 	.copy-btn:hover {
 		color: var(--color-text);
 		background: var(--color-bg-tertiary);
+	}
+
+	.copy-btn.copied {
+		color: var(--color-success);
 	}
 
 	.loading {
@@ -289,6 +353,43 @@
 		background: rgba(239, 68, 68, 0.1);
 	}
 
+	.pagination {
+		display: flex;
+		align-items: center;
+		justify-content: center;
+		gap: 16px;
+		margin-top: 24px;
+	}
+
+	.pagination-btn {
+		display: flex;
+		align-items: center;
+		gap: 6px;
+		padding: 10px 16px;
+		background: var(--color-bg-secondary);
+		border: 1px solid var(--color-border);
+		border-radius: var(--radius-md);
+		color: var(--color-text-secondary);
+		font-size: 14px;
+		transition: all var(--transition);
+	}
+
+	.pagination-btn:hover:not(:disabled) {
+		background: var(--color-bg-tertiary);
+		border-color: var(--color-border-light);
+		color: var(--color-text);
+	}
+
+	.pagination-btn:disabled {
+		opacity: 0.5;
+		cursor: not-allowed;
+	}
+
+	.pagination-info {
+		font-size: 14px;
+		color: var(--color-text-secondary);
+	}
+
 	@media (max-width: 768px) {
 		.email-link {
 			grid-template-columns: 1fr;
@@ -301,6 +402,10 @@
 
 		.email-subject {
 			font-size: 14px;
+		}
+
+		.pagination {
+			flex-wrap: wrap;
 		}
 	}
 </style>
