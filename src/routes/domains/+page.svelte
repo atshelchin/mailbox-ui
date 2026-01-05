@@ -9,7 +9,13 @@
 		verifyDomain,
 		deleteDomain,
 		getVerifyInfo,
-		type UserDomain
+		updateVisibility,
+		getAllowedUsers,
+		addAllowedUser,
+		removeAllowedUser,
+		DomainVisibility,
+		type UserDomain,
+		type AllowedUser
 	} from '$lib/api';
 	import { formatDate } from '$lib/utils';
 
@@ -34,6 +40,16 @@
 	let showDeleteModal = $state(false);
 	let deleteLoading = $state(false);
 	let domainToDelete = $state<UserDomain | null>(null);
+
+	// Visibility modal
+	let showVisibilityModal = $state(false);
+	let visibilityLoading = $state(false);
+	let domainToManage = $state<UserDomain | null>(null);
+	let allowedUsers = $state<AllowedUser[]>([]);
+	let allowedUsersLoading = $state(false);
+	let newUsername = $state('');
+	let addUserError = $state('');
+	let addUserLoading = $state(false);
 
 	// Copy feedback
 	let copiedRecord = $state('');
@@ -86,6 +102,8 @@
 					name: res.domain.name,
 					txtRecord: res.domain.txtRecord,
 					verified: res.domain.verified,
+					visibility: DomainVisibility.Private,
+					allowedUsers: 0,
 					createdAt: Math.floor(Date.now() / 1000)
 				},
 				...domains
@@ -162,6 +180,107 @@
 		copiedRecord = record;
 		setTimeout(() => (copiedRecord = ''), 2000);
 	}
+
+	// Visibility management
+	async function openVisibilityModal(domain: UserDomain) {
+		domainToManage = domain;
+		showVisibilityModal = true;
+		addUserError = '';
+		newUsername = '';
+
+		if (domain.visibility === DomainVisibility.Partial) {
+			await loadAllowedUsers(domain.id);
+		}
+	}
+
+	async function loadAllowedUsers(domainId: string) {
+		allowedUsersLoading = true;
+		const res = await getAllowedUsers(domainId);
+		if (res.success && res.allowedUsers) {
+			allowedUsers = res.allowedUsers;
+		}
+		allowedUsersLoading = false;
+	}
+
+	async function handleVisibilityChange(visibility: DomainVisibility) {
+		if (!domainToManage) return;
+
+		visibilityLoading = true;
+		const res = await updateVisibility(domainToManage.id, visibility);
+
+		if (res.success) {
+			domains = domains.map((d) =>
+				d.id === domainToManage!.id ? { ...d, visibility } : d
+			);
+			domainToManage = { ...domainToManage, visibility };
+
+			if (visibility === DomainVisibility.Partial) {
+				await loadAllowedUsers(domainToManage.id);
+			}
+		}
+
+		visibilityLoading = false;
+	}
+
+	async function handleAddUser() {
+		if (!domainToManage || !newUsername.trim()) return;
+
+		addUserLoading = true;
+		addUserError = '';
+
+		const res = await addAllowedUser(domainToManage.id, newUsername.trim());
+
+		if (res.success && res.user) {
+			allowedUsers = [...allowedUsers, { ...res.user, addedAt: Math.floor(Date.now() / 1000) }];
+			domains = domains.map((d) =>
+				d.id === domainToManage!.id ? { ...d, allowedUsers: d.allowedUsers + 1 } : d
+			);
+			newUsername = '';
+		} else {
+			addUserError = res.error || 'Failed to add user';
+		}
+
+		addUserLoading = false;
+	}
+
+	async function handleRemoveUser(userId: string) {
+		if (!domainToManage) return;
+
+		const res = await removeAllowedUser(domainToManage.id, userId);
+
+		if (res.success) {
+			allowedUsers = allowedUsers.filter((u) => u.id !== userId);
+			domains = domains.map((d) =>
+				d.id === domainToManage!.id ? { ...d, allowedUsers: Math.max(0, d.allowedUsers - 1) } : d
+			);
+		}
+	}
+
+	function getVisibilityLabel(visibility: DomainVisibility): string {
+		switch (visibility) {
+			case DomainVisibility.Private:
+				return 'Private';
+			case DomainVisibility.Partial:
+				return 'Partial';
+			case DomainVisibility.Public:
+				return 'Public';
+			default:
+				return 'Unknown';
+		}
+	}
+
+	function getVisibilityBadgeClass(visibility: DomainVisibility): string {
+		switch (visibility) {
+			case DomainVisibility.Private:
+				return 'badge-secondary';
+			case DomainVisibility.Partial:
+				return 'badge-warning';
+			case DomainVisibility.Public:
+				return 'badge-success';
+			default:
+				return '';
+		}
+	}
 </script>
 
 <svelte:head>
@@ -209,6 +328,14 @@
 							{:else}
 								<span class="badge badge-warning">Pending</span>
 							{/if}
+							{#if domain.verified}
+								<span class="badge {getVisibilityBadgeClass(domain.visibility)}">
+									{getVisibilityLabel(domain.visibility)}
+									{#if domain.visibility === DomainVisibility.Partial && domain.allowedUsers > 0}
+										({domain.allowedUsers})
+									{/if}
+								</span>
+							{/if}
 						</div>
 						<span class="domain-date">Added {formatDate(domain.createdAt)}</span>
 					</div>
@@ -216,6 +343,13 @@
 						{#if !domain.verified}
 							<button class="btn btn-secondary btn-sm" onclick={() => openVerifyModal(domain)}>
 								Verify
+							</button>
+						{:else}
+							<button class="btn btn-secondary btn-sm" onclick={() => openVisibilityModal(domain)} title="Manage visibility">
+								<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+									<circle cx="12" cy="12" r="3" />
+									<path d="M19.4 15a1.65 1.65 0 00.33 1.82l.06.06a2 2 0 010 2.83 2 2 0 01-2.83 0l-.06-.06a1.65 1.65 0 00-1.82-.33 1.65 1.65 0 00-1 1.51V21a2 2 0 01-2 2 2 2 0 01-2-2v-.09A1.65 1.65 0 009 19.4a1.65 1.65 0 00-1.82.33l-.06.06a2 2 0 01-2.83 0 2 2 0 010-2.83l.06-.06a1.65 1.65 0 00.33-1.82 1.65 1.65 0 00-1.51-1H3a2 2 0 01-2-2 2 2 0 012-2h.09A1.65 1.65 0 004.6 9a1.65 1.65 0 00-.33-1.82l-.06-.06a2 2 0 010-2.83 2 2 0 012.83 0l.06.06a1.65 1.65 0 001.82.33H9a1.65 1.65 0 001-1.51V3a2 2 0 012-2 2 2 0 012 2v.09a1.65 1.65 0 001 1.51 1.65 1.65 0 001.82-.33l.06-.06a2 2 0 012.83 0 2 2 0 010 2.83l-.06.06a1.65 1.65 0 00-.33 1.82V9a1.65 1.65 0 001.51 1H21a2 2 0 012 2 2 2 0 01-2 2h-.09a1.65 1.65 0 00-1.51 1z" />
+								</svg>
 							</button>
 						{/if}
 						<button class="btn btn-ghost btn-sm" onclick={() => confirmDelete(domain)}>
@@ -349,6 +483,110 @@
 				<span class="spinner"></span>
 			{/if}
 			Verify Now
+		</button>
+	{/snippet}
+</Modal>
+
+<!-- Visibility Modal -->
+<Modal title="Domain Visibility" open={showVisibilityModal} onclose={() => (showVisibilityModal = false)}>
+	<div class="visibility-settings">
+		<p class="visibility-domain"><strong>{domainToManage?.name}</strong></p>
+
+		<div class="visibility-options">
+			<label class="visibility-option" class:active={domainToManage?.visibility === DomainVisibility.Private}>
+				<input
+					type="radio"
+					name="visibility"
+					checked={domainToManage?.visibility === DomainVisibility.Private}
+					onchange={() => handleVisibilityChange(DomainVisibility.Private)}
+					disabled={visibilityLoading}
+				/>
+				<div class="option-content">
+					<span class="option-title">Private</span>
+					<span class="option-desc">Only you can create mailboxes on this domain</span>
+				</div>
+			</label>
+
+			<label class="visibility-option" class:active={domainToManage?.visibility === DomainVisibility.Partial}>
+				<input
+					type="radio"
+					name="visibility"
+					checked={domainToManage?.visibility === DomainVisibility.Partial}
+					onchange={() => handleVisibilityChange(DomainVisibility.Partial)}
+					disabled={visibilityLoading}
+				/>
+				<div class="option-content">
+					<span class="option-title">Partial</span>
+					<span class="option-desc">You and allowed users can create mailboxes</span>
+				</div>
+			</label>
+
+			<label class="visibility-option" class:active={domainToManage?.visibility === DomainVisibility.Public}>
+				<input
+					type="radio"
+					name="visibility"
+					checked={domainToManage?.visibility === DomainVisibility.Public}
+					onchange={() => handleVisibilityChange(DomainVisibility.Public)}
+					disabled={visibilityLoading}
+				/>
+				<div class="option-content">
+					<span class="option-title">Public</span>
+					<span class="option-desc">Anyone can create mailboxes on this domain</span>
+				</div>
+			</label>
+		</div>
+
+		{#if domainToManage?.visibility === DomainVisibility.Partial}
+			<div class="allowed-users-section">
+				<h4>Allowed Users</h4>
+
+				{#if addUserError}
+					<div class="alert alert-error" style="margin-bottom: 12px; font-size: 13px;">{addUserError}</div>
+				{/if}
+
+				<div class="add-user-form">
+					<input
+						type="text"
+						class="input"
+						bind:value={newUsername}
+						placeholder="Enter username"
+						disabled={addUserLoading}
+					/>
+					<button class="btn btn-primary btn-sm" onclick={handleAddUser} disabled={addUserLoading || !newUsername.trim()}>
+						{#if addUserLoading}
+							<span class="spinner"></span>
+						{/if}
+						Add
+					</button>
+				</div>
+
+				{#if allowedUsersLoading}
+					<div class="loading-small">
+						<div class="spinner"></div>
+					</div>
+				{:else if allowedUsers.length === 0}
+					<p class="no-users">No allowed users yet</p>
+				{:else}
+					<ul class="allowed-users-list">
+						{#each allowedUsers as user (user.id)}
+							<li class="allowed-user-item">
+								<span class="user-name">{user.username}</span>
+								<button class="remove-user-btn" onclick={() => handleRemoveUser(user.id)} title="Remove user">
+									<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+										<path d="M18 6L6 18M6 6l12 12" />
+									</svg>
+								</button>
+							</li>
+						{/each}
+					</ul>
+				{/if}
+			</div>
+		{/if}
+	</div>
+
+	{#snippet footer()}
+		<button class="btn btn-secondary" onclick={() => (showVisibilityModal = false)}>
+			Close
 		</button>
 	{/snippet}
 </Modal>
@@ -492,6 +730,137 @@
 
 	.copy-btn.copied {
 		color: var(--color-success);
+	}
+
+	/* Visibility Modal Styles */
+	.visibility-settings {
+		display: flex;
+		flex-direction: column;
+		gap: 20px;
+	}
+
+	.visibility-domain {
+		font-size: 15px;
+	}
+
+	.visibility-options {
+		display: flex;
+		flex-direction: column;
+		gap: 8px;
+	}
+
+	.visibility-option {
+		display: flex;
+		align-items: flex-start;
+		gap: 12px;
+		padding: 12px;
+		background: var(--color-bg-tertiary);
+		border: 2px solid transparent;
+		border-radius: var(--radius-md);
+		cursor: pointer;
+		transition: all var(--transition);
+	}
+
+	.visibility-option:hover {
+		background: var(--color-bg-hover);
+	}
+
+	.visibility-option.active {
+		border-color: var(--color-primary);
+		background: rgba(99, 102, 241, 0.1);
+	}
+
+	.visibility-option input {
+		margin-top: 2px;
+	}
+
+	.option-content {
+		display: flex;
+		flex-direction: column;
+		gap: 2px;
+	}
+
+	.option-title {
+		font-weight: 500;
+		font-size: 14px;
+	}
+
+	.option-desc {
+		font-size: 12px;
+		color: var(--color-text-secondary);
+	}
+
+	.allowed-users-section {
+		padding-top: 16px;
+		border-top: 1px solid var(--color-border);
+	}
+
+	.allowed-users-section h4 {
+		font-size: 14px;
+		font-weight: 600;
+		margin-bottom: 12px;
+	}
+
+	.add-user-form {
+		display: flex;
+		gap: 8px;
+		margin-bottom: 12px;
+	}
+
+	.add-user-form .input {
+		flex: 1;
+	}
+
+	.loading-small {
+		display: flex;
+		justify-content: center;
+		padding: 16px 0;
+	}
+
+	.no-users {
+		font-size: 13px;
+		color: var(--color-text-muted);
+		text-align: center;
+		padding: 16px 0;
+	}
+
+	.allowed-users-list {
+		list-style: none;
+		padding: 0;
+		margin: 0;
+		display: flex;
+		flex-direction: column;
+		gap: 4px;
+	}
+
+	.allowed-user-item {
+		display: flex;
+		align-items: center;
+		justify-content: space-between;
+		padding: 10px 12px;
+		background: var(--color-bg-tertiary);
+		border-radius: var(--radius-sm);
+	}
+
+	.user-name {
+		font-size: 14px;
+	}
+
+	.remove-user-btn {
+		padding: 4px;
+		color: var(--color-text-muted);
+		border-radius: var(--radius-sm);
+		transition: all var(--transition);
+	}
+
+	.remove-user-btn:hover {
+		color: var(--color-error);
+		background: rgba(239, 68, 68, 0.1);
+	}
+
+	.badge-secondary {
+		background: var(--color-bg-tertiary);
+		color: var(--color-text-secondary);
 	}
 
 	@media (max-width: 640px) {
