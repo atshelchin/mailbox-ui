@@ -451,7 +451,7 @@
 			<div class="dns-record">
 				<div class="record-row">
 					<span class="record-label">Host:</span>
-					<code>@</code> or <code>{domainToVerify?.name}</code>
+					<code>{domainToVerify?.name}</code>
 				</div>
 				<div class="record-row">
 					<span class="record-label">Type:</span>
