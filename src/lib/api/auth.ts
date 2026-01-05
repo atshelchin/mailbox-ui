@@ -1,4 +1,4 @@
-import { api } from './client';
+import { api, setToken, removeToken } from './client';
 import {
 	startRegistration,
 	startAuthentication,
@@ -29,6 +29,7 @@ interface LoginOptionsResponse {
 interface AuthResponse {
 	success: boolean;
 	user?: User;
+	token?: string;
 	error?: string;
 }
 
@@ -41,11 +42,18 @@ export async function verifyRegistration(
 	tempUserId: string,
 	credential: Credential
 ): Promise<AuthResponse> {
-	return api.post<AuthResponse>('/api/auth/register/verify', {
+	const res = await api.post<AuthResponse>('/api/auth/register/verify', {
 		username,
 		tempUserId,
 		response: credential
 	});
+
+	// Store token if returned
+	if (res.success && res.token) {
+		setToken(res.token);
+	}
+
+	return res;
 }
 
 export async function getLoginOptions(username?: string): Promise<LoginOptionsResponse> {
@@ -56,13 +64,21 @@ export async function verifyLogin(
 	credential: Credential,
 	options: { userId?: string; challengeId?: string }
 ): Promise<AuthResponse> {
-	return api.post<AuthResponse>('/api/auth/login/verify', {
+	const res = await api.post<AuthResponse>('/api/auth/login/verify', {
 		...options,
 		response: credential
 	});
+
+	// Store token if returned
+	if (res.success && res.token) {
+		setToken(res.token);
+	}
+
+	return res;
 }
 
 export async function logout(): Promise<{ success: boolean }> {
+	removeToken();
 	return api.post('/api/auth/logout');
 }
 
