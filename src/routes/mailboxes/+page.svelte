@@ -48,7 +48,8 @@
 			}
 
 			if (domainRes.success && domainRes.domains) {
-				domains = domainRes.domains.filter(d => d.isOfficial || d.isMine);
+				// Include official domains, own domains, and public domains (visibility === 2)
+				domains = domainRes.domains.filter(d => d.isOfficial || d.isMine || d.visibility === 2);
 				if (domains.length > 0) {
 					selectedDomainId = domains[0].id;
 				}
