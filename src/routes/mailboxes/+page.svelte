@@ -82,7 +82,7 @@
 		const res = await createMailbox(localPart.trim().toLowerCase(), selectedDomainId);
 
 		if (res.success && res.mailbox) {
-			mailboxes = [res.mailbox, ...mailboxes];
+			mailboxes = [{ ...res.mailbox, emailCount: 0 }, ...mailboxes];
 			showCreateModal = false;
 			localPart = '';
 		} else {
@@ -158,7 +158,11 @@
 				<div class="mailbox-card card card-hover">
 					<div class="mailbox-info">
 						<a href="/mailboxes/{mailbox.id}" class="mailbox-address">{mailbox.address}</a>
-						<span class="mailbox-date">Created {formatDate(mailbox.createdAt)}</span>
+						<span class="mailbox-meta">
+							<span>{mailbox.emailCount} emails</span>
+							<span class="meta-sep">·</span>
+							<span>Created {formatDate(mailbox.createdAt)}</span>
+						</span>
 					</div>
 					<div class="mailbox-actions">
 						<a href="/mailboxes/{mailbox.id}" class="btn btn-secondary btn-sm">
@@ -287,9 +291,16 @@
 		color: var(--color-primary);
 	}
 
-	.mailbox-date {
+	.mailbox-meta {
+		display: flex;
+		align-items: center;
+		gap: 6px;
 		font-size: 13px;
 		color: var(--color-text-muted);
+	}
+
+	.meta-sep {
+		color: var(--color-border);
 	}
 
 	.mailbox-actions {

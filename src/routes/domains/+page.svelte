@@ -104,6 +104,8 @@
 					verified: res.domain.verified,
 					visibility: DomainVisibility.Private,
 					allowedUsers: 0,
+					mailboxCount: 0,
+					emailCount: 0,
 					createdAt: Math.floor(Date.now() / 1000)
 				},
 				...domains
@@ -337,7 +339,11 @@
 								</span>
 							{/if}
 						</div>
-						<span class="domain-date">Added {formatDate(domain.createdAt)}</span>
+						<div class="domain-stats">
+							<span class="domain-stat">{domain.mailboxCount} mailboxes</span>
+							<span class="domain-stat-sep">·</span>
+							<span class="domain-stat">{domain.emailCount} emails</span>
+						</div>
 					</div>
 					<div class="domain-actions">
 						{#if !domain.verified}
@@ -647,9 +653,16 @@
 		font-weight: 600;
 	}
 
-	.domain-date {
+	.domain-stats {
+		display: flex;
+		align-items: center;
+		gap: 6px;
 		font-size: 13px;
 		color: var(--color-text-muted);
+	}
+
+	.domain-stat-sep {
+		color: var(--color-border);
 	}
 
 	.domain-actions {

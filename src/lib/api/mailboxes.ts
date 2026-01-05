@@ -5,6 +5,7 @@ export interface Mailbox {
 	address: string;
 	localPart: string;
 	domain: string;
+	emailCount: number;
 	createdAt: number;
 }
 

@@ -20,6 +20,8 @@ export interface UserDomain {
 	verified: boolean;
 	visibility: DomainVisibility;
 	allowedUsers: number;
+	mailboxCount: number;
+	emailCount: number;
 	createdAt: number;
 }
 

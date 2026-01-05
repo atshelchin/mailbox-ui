@@ -19,6 +19,7 @@
 		</a>
 
 		<nav class="nav">
+			<a href="/stats" class="nav-link">Stats</a>
 			{#if userStore.isLoggedIn}
 				<a href="/mailboxes" class="nav-link">Mailboxes</a>
 				<a href="/domains" class="nav-link">Domains</a>
